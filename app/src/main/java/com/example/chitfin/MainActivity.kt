@@ -1,5 +1,6 @@
 package com.example.chitfin
 
+import androidx.compose.material.icons.filled.MenuBook
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +34,24 @@ import com.example.chitfin.data.User
 import com.example.chitfin.data.UserPreferences
 import com.example.chitfin.ui.theme.ChitFinTheme
 import kotlinx.coroutines.launch
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import android.content.Intent
+import androidx.compose.runtime.rememberCoroutineScope
+import java.io.File
+import androidx.compose.material.icons.filled.PictureAsPdf
+import com.example.chitfin.data.PdfStorage
+import android.content.Context
+import com.example.chitfin.data.copyPdfToInternalStorage
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.lazy.items
+import java.io.FileOutputStream
+import androidx.compose.foundation.clickable
+import com.example.chitfin.ui.PdfViewerScreen
 
 // Список экранов для bottom bar
 sealed class BottomNavItem(
@@ -160,6 +179,7 @@ fun MainAppScreen(navController: NavHostController) {
             )
 
             // Контент в зависимости от вкладки
+            // Контент в зависимости от вкладки
             NavHost(
                 navController = navController,
                 startDestination = BottomNavItem.Library.route,
@@ -169,7 +189,16 @@ fun MainAppScreen(navController: NavHostController) {
                     LibraryScreen()
                 }
                 composable(BottomNavItem.MyBooks.route) {
-                    MyBooksScreen()
+                    MyBooksScreen(navController = navController)  // ← теперь с параметром
+                }
+
+                // ← вот сюда вставляем новый экран
+                composable("pdf_viewer/{fileName}") { backStackEntry ->
+                    val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
+                    PdfViewerScreen(
+                        fileName = fileName,
+                        onBack = { navController.popBackStack() }
+                    )
                 }
             }
         }
@@ -198,68 +227,136 @@ fun LibraryScreen() {
 }
 
 @Composable
-fun MyBooksScreen() {
-    // Список загруженных книг + кнопка "Загрузить PDF"
+fun MyBooksScreen(navController: NavHostController) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val pdfStorage = remember { PdfStorage(context) }
+    val pdfFiles by pdfStorage.pdfFilesFlow.collectAsState(initial = emptySet<String>())
+
+    val pdfList = pdfFiles.toList()
+
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            context.contentResolver.takePersistableUriPermission(
+                it,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+
+            coroutineScope.launch {
+                val savedName = copyPdfToInternalStorage(context, it)
+                if (savedName != null) {
+                    pdfStorage.addPdfFile(savedName)
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(
-            "Мои книги",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Text("Мои книги", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color.White)
 
-        // Пока список пустой — можно потом заменить на реальный список из Room / файлов
-        val books = remember { emptyList<String>() } // ← здесь будет реальный список позже
-
-        if (books.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "У вас нет книг",
-                    fontSize = 24.sp,
-                    color = Color.LightGray
-                )
+        if (pdfList.isEmpty()) {
+            Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) {
+                Text("У вас нет книг", fontSize = 24.sp, color = Color.LightGray)
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f)
-            ) {
-                items(books.size) { index ->
-                    Text(
-                        books[index],
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp)
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .padding(16.dp),
-                        color = Color.White
+            LazyColumn(Modifier.weight(1f)) {
+                items(
+                    items = pdfList,
+                    key = { fileName -> fileName }  // опционально, но полезно для стабильности списка
+                ) { fileName ->
+                    PdfItemRow(
+                        fileName = fileName,
+                        context = context,
+                        onClick = {
+                            navController.navigate("pdf_viewer/$fileName")
+                        }
                     )
                 }
             }
         }
 
-        // Кнопка "Загрузить PDF" всегда внизу (над bottom bar)
         Button(
-            onClick = { /* TODO: запуск загрузки файла */ },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(top = 16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF6200EE)
-            )
+            onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+            modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 16.dp)
         ) {
-            Text("Загрузить PDF", fontSize = 18.sp)
+            Text("Загрузить PDF")
         }
+    }
+}
+
+@Composable
+fun PdfItemRow(
+    fileName: String,
+    context: Context,
+    onClick: () -> Unit  // ← добавлен
+) {
+    val pageCount = remember(fileName) { getPdfPageCount(context, fileName) }
+
+    Card(
+        onClick = onClick,  // ← теперь Card кликабельна
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.12f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PdfPlaceholderIcon(Modifier.size(64.dp))
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(fileName, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (pageCount > 0) "$pageCount стр." else "страницы неизвестны",
+                    color = Color.LightGray,
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PdfPlaceholderIcon(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(Color.White)
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.PictureAsPdf,  // или любая другая иконка
+            contentDescription = "PDF",
+            tint = Color.Red.copy(alpha = 0.7f),
+            modifier = Modifier.size(40.dp)
+        )
+    }
+}
+
+private fun getPdfPageCount(context: Context, fileName: String): Int {
+    val pdfDir = File(context.filesDir, "pdfs")
+    val file = File(pdfDir, fileName)
+    if (!file.exists()) return 0
+
+    return try {
+        ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+            PdfRenderer(pfd).use { renderer ->
+                renderer.pageCount
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        0
     }
 }
 
@@ -421,5 +518,34 @@ fun LoginScreenPlaceholder(navController: androidx.navigation.NavController) {
         Button(onClick = { navController.popBackStack() }) {
             Text("Назад")
         }
+    }
+}
+
+// Автоматическое копирование встроенных PDF из assets при первом запуске
+private suspend fun copyAssetsPdfsToInternal(context: Context, pdfStorage: PdfStorage) {
+    val assetManager = context.assets
+    val pdfDir = File(context.filesDir, "pdfs")
+    if (!pdfDir.exists()) pdfDir.mkdirs()
+
+    try {
+        val files = assetManager.list("pdf") ?: emptyArray()
+        files.forEach { fileName ->
+            if (fileName.endsWith(".pdf", ignoreCase = true)) {
+                val targetFile = File(pdfDir, fileName)
+
+                // Копируем только если ещё нет
+                if (!targetFile.exists()) {
+                    assetManager.open("pdf/$fileName").use { input ->
+                        FileOutputStream(targetFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    pdfStorage.addPdfFile(fileName)
+                    println("Скопирован встроенный PDF: $fileName")
+                }
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }

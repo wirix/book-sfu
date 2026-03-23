@@ -46,7 +46,6 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
-    implementation("androidx.activity:activity-compose:1.9.0")  // или новее
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.navigation.compose)
@@ -58,4 +57,8 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    implementation("androidx.datastore:datastore-preferences:1.1.1")              // для PdfStorage
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")               // часто нужно для collectAsState
+    implementation("androidx.activity:activity-compose:1.9.2")  // или актуальную версию
+    implementation("androidx.compose.material:material-icons-extended:1.7.0")  // для иконок
 }
