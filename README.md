@@ -141,9 +141,101 @@ app/
 Пройдите простую регистрацию (имя, email, пароль)
 После входа вы попадёте в библиотеку книг
 
-Что дальше?
-Теперь вы можете:
+### Инструкция по сборке APK через консоль (Terminal)
 
-Нажимать кнопку «Загрузить PDF»
-Выбирать PDF-файлы из памяти телефона
-Читать их с удобным перелистыванием страниц
+#### 1. Откройте терминал в корне проекта
+
+В Android Studio:
+- **View → Tool Windows → Terminal**  
+  или  
+- Нажмите `Alt + F12`
+
+Терминал откроется в корне вашего проекта (`chitFin`).
+
+#### 2. Сборка Debug-версии (для тестирования)
+
+Выполните одну из команд:
+
+```bash
+# Самый простой и рекомендуемый способ
+./gradlew assembleDebug
+```
+
+или
+
+```bash
+# Если у вас Windows и PowerShell
+gradlew.bat assembleDebug
+```
+
+После успешной сборки APK появится здесь:
+
+**Путь к файлу:**
+```
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+#### 3. Сборка Release-версии (чистая версия для распространения)
+
+```bash
+./gradlew assembleRelease
+```
+
+APK появится здесь:
+```
+app/build/outputs/apk/release/app-release.apk
+```
+
+#### 4. Быстрые полезные команды
+
+| Команда                              | Что делает                                      | Где будет APK                              |
+|--------------------------------------|--------------------------------------------------|--------------------------------------------|
+| `./gradlew assembleDebug`            | Сборка debug-версии (самая быстрая)             | `app-debug.apk`                            |
+| `./gradlew assembleRelease`          | Сборка release-версии                           | `app-release.apk`                          |
+| `./gradlew clean`                    | Очистка предыдущих сборок                       | —                                          |
+| `./gradlew assembleDebug --stacktrace` | Сборка с выводом ошибок (если что-то сломалось) | —                                          |
+
+#### 5. Как быстро найти собранный APK
+
+После сборки выполните команду:
+
+```bash
+# На Windows
+explorer app\build\outputs\apk\debug
+
+# На macOS / Linux
+open app/build/outputs/apk/debug
+```
+
+---
+
+### Полный пример использования (для Windows)
+
+```powershell
+cd C:\Users\MSI-PC\AndroidStudioProjects\chitFin
+
+# Очистка старой сборки (рекомендуется)
+.\gradlew clean
+
+# Сборка debug версии
+.\gradlew assembleDebug
+
+# Открыть папку с APK
+explorer app\build\outputs\apk\debug
+```
+
+---
+
+### Рекомендация
+
+Для повседневного тестирования используйте:
+```bash
+./gradlew assembleDebug
+```
+
+Для отправки друзьям или публикации используйте:
+```bash
+./gradlew assembleRelease
+```
+
+
