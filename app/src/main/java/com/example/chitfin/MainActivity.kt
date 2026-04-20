@@ -239,10 +239,34 @@ fun MyBooksScreen(navController: NavHostController) {
 
     val pdfList = pdfFiles.toList()
 
-    // Состояние для диалога переименования
+    // Состояния для диалога переименования
     var showRenameDialog by remember { mutableStateOf(false) }
     var currentFileName by remember { mutableStateOf("") }
     var newFileName by remember { mutableStateOf("") }
+
+    // Функция удаления книги
+    fun deleteBook(fileName: String) {
+        coroutineScope.launch {
+            val pdfDir = File(context.filesDir, "pdfs")
+            val file = File(pdfDir, fileName)
+            if (file.exists()) {
+                file.delete()
+            }
+            pdfStorage.deletePdfFile(fileName)   // удаляем из DataStore
+        }
+    }
+
+    // Функция переименования
+    fun renameBook(oldName: String, newName: String) {
+        if (newName.isBlank() || newName == oldName) return
+
+        coroutineScope.launch {
+            val success = pdfStorage.renamePdfFile(oldName, newName)
+            if (success) {
+                // Можно добавить Toast или Snackbar "Название изменено"
+            }
+        }
+    }
 
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -258,17 +282,6 @@ fun MyBooksScreen(navController: NavHostController) {
                 if (savedName != null) {
                     pdfStorage.addPdfFile(savedName)
                 }
-            }
-        }
-    }
-
-    fun renameBook(oldName: String, newName: String) {
-        if (newName.isBlank() || newName == oldName) return
-
-        coroutineScope.launch {
-            val success = pdfStorage.renamePdfFile(oldName, newName)
-            if (success) {
-                // Можно показать Snackbar "Название изменено"
             }
         }
     }
@@ -298,14 +311,13 @@ fun MyBooksScreen(navController: NavHostController) {
                         onClick = {
                             navController.navigate("pdf_viewer/$fileName")
                         },
-                        onDelete = {
-                            // TODO: добавить подтверждение удаления
-                            // deleteBook(fileName)
-                        },
                         onRename = { oldName ->
                             currentFileName = oldName
                             newFileName = oldName
                             showRenameDialog = true
+                        },
+                        onDelete = {
+                            deleteBook(fileName)
                         }
                     )
                 }
@@ -360,16 +372,17 @@ fun MyBooksScreen(navController: NavHostController) {
 fun PdfItemRow(
     fileName: String,
     context: Context,
-    onClick: () -> Unit,           // открытие книги
-    onDelete: () -> Unit,          // удаление книги
-    onRename: (String) -> Unit     // ← новое: переименование
+    onClick: () -> Unit,        // открытие книги
+    onRename: (String) -> Unit, // переименование
+    onDelete: () -> Unit        // удаление
 ) {
     val pageCount = remember(fileName) { getPdfPageCount(context, fileName) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .clickable { onClick() },           // ← Главный клик по всей карточке
         colors = CardDefaults.cardColors(
             containerColor = Color.White.copy(alpha = 0.12f)
         )
@@ -403,7 +416,7 @@ fun PdfItemRow(
                 Icon(
                     imageVector = Icons.Default.Edit,
                     contentDescription = "Переименовать",
-                    tint = Color.White.copy(alpha = 0.8f)
+                    tint = Color.White.copy(alpha = 0.85f)
                 )
             }
 
@@ -412,7 +425,7 @@ fun PdfItemRow(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Удалить",
-                    tint = Color.Red.copy(alpha = 0.8f)
+                    tint = Color.Red.copy(alpha = 0.85f)
                 )
             }
         }
