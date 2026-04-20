@@ -52,6 +52,9 @@ import androidx.compose.foundation.lazy.items
 import java.io.FileOutputStream
 import androidx.compose.foundation.clickable
 import com.example.chitfin.ui.PdfViewerScreen
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.ui.text.style.TextOverflow
 
 // Список экранов для bottom bar
 sealed class BottomNavItem(
@@ -230,10 +233,16 @@ fun LibraryScreen() {
 fun MyBooksScreen(navController: NavHostController) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
     val pdfStorage = remember { PdfStorage(context) }
     val pdfFiles by pdfStorage.pdfFilesFlow.collectAsState(initial = emptySet<String>())
 
     val pdfList = pdfFiles.toList()
+
+    // Состояние для диалога переименования
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var currentFileName by remember { mutableStateOf("") }
+    var newFileName by remember { mutableStateOf("") }
 
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -253,6 +262,17 @@ fun MyBooksScreen(navController: NavHostController) {
         }
     }
 
+    fun renameBook(oldName: String, newName: String) {
+        if (newName.isBlank() || newName == oldName) return
+
+        coroutineScope.launch {
+            val success = pdfStorage.renamePdfFile(oldName, newName)
+            if (success) {
+                // Можно показать Snackbar "Название изменено"
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -261,20 +281,31 @@ fun MyBooksScreen(navController: NavHostController) {
         Text("Мои книги", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color.White)
 
         if (pdfList.isEmpty()) {
-            Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("У вас нет книг", fontSize = 24.sp, color = Color.LightGray)
             }
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(
-                    items = pdfList,
-                    key = { fileName -> fileName }  // опционально, но полезно для стабильности списка
-                ) { fileName ->
+                items(pdfList) { fileName ->
                     PdfItemRow(
                         fileName = fileName,
                         context = context,
                         onClick = {
                             navController.navigate("pdf_viewer/$fileName")
+                        },
+                        onDelete = {
+                            // TODO: добавить подтверждение удаления
+                            // deleteBook(fileName)
+                        },
+                        onRename = { oldName ->
+                            currentFileName = oldName
+                            newFileName = oldName
+                            showRenameDialog = true
                         }
                     )
                 }
@@ -283,10 +314,45 @@ fun MyBooksScreen(navController: NavHostController) {
 
         Button(
             onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
-            modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(top = 16.dp)
         ) {
             Text("Загрузить PDF")
         }
+    }
+
+    // Диалог переименования
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Переименовать книгу") },
+            text = {
+                OutlinedTextField(
+                    value = newFileName,
+                    onValueChange = { newFileName = it },
+                    label = { Text("Новое название") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        renameBook(currentFileName, newFileName)
+                        showRenameDialog = false
+                    }
+                ) {
+                    Text("Сохранить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
     }
 }
 
@@ -294,12 +360,13 @@ fun MyBooksScreen(navController: NavHostController) {
 fun PdfItemRow(
     fileName: String,
     context: Context,
-    onClick: () -> Unit  // ← добавлен
+    onClick: () -> Unit,           // открытие книги
+    onDelete: () -> Unit,          // удаление книги
+    onRename: (String) -> Unit     // ← новое: переименование
 ) {
     val pageCount = remember(fileName) { getPdfPageCount(context, fileName) }
 
     Card(
-        onClick = onClick,  // ← теперь Card кликабельна
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
@@ -313,13 +380,39 @@ fun PdfItemRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             PdfPlaceholderIcon(Modifier.size(64.dp))
+
             Spacer(Modifier.width(16.dp))
-            Column {
-                Text(fileName, color = Color.White, fontWeight = FontWeight.SemiBold)
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    fileName,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(
                     if (pageCount > 0) "$pageCount стр." else "страницы неизвестны",
                     color = Color.LightGray,
                     fontSize = 14.sp
+                )
+            }
+
+            // Кнопка редактирования
+            IconButton(onClick = { onRename(fileName) }) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Переименовать",
+                    tint = Color.White.copy(alpha = 0.8f)
+                )
+            }
+
+            // Кнопка удаления
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Удалить",
+                    tint = Color.Red.copy(alpha = 0.8f)
                 )
             }
         }
