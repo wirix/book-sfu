@@ -55,6 +55,23 @@ import com.example.chitfin.ui.PdfViewerScreen
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.viewinterop.AndroidView
+import org.osmdroid.views.MapView
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.overlay.Marker
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.Serializable
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
 
 // Список экранов для bottom bar
 sealed class BottomNavItem(
@@ -210,25 +227,146 @@ fun MainAppScreen(navController: NavHostController) {
 
 @Composable
 fun LibraryScreen() {
-    // Пока заглушка для главной страницы
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
+    var catFact by remember { mutableStateOf("Нажми кнопку, чтобы получить факт о котиках 🐱") }
+    var isLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val client = remember {
+        HttpClient(CIO) {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+    }
+
+    suspend fun loadCatFact() {
+        isLoading = true
+        try {
+            val response: CatFactResponse = client.get("https://catfact.ninja/fact").body()
+            catFact = response.fact
+        } catch (e: Exception) {
+            catFact = "Не удалось загрузить факт 😿\nПроверь интернет"
+        } finally {
+            isLoading = false
+        }
+    }
+
+    // Загружаем факт при первом открытии экрана
+    LaunchedEffect(Unit) {
+        loadCatFact()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Заголовок
         Text(
-            "Главная / Популярные книги",
+            text = "Главная / Популярные книги",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = Color.White,
+            modifier = Modifier
+                .padding(24.dp)
+                .fillMaxWidth()
         )
-        Spacer(Modifier.height(40.dp))
-        Text("Здесь будет список популярных книг", color = Color.LightGray)
+
+        // === Блок с фактом о котиках ===
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🐱 Случайный факт о котиках",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White)
+
+                    Spacer(Modifier.weight(1f))
+
+                    IconButton(onClick = { scope.launch { loadCatFact() } }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Новый факт", tint = Color.White)
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                if (isLoading) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.CenterHorizontally))
+                } else {
+                    Text(
+                        text = catFact,
+                        color = Color.LightGray,
+                        fontSize = 16.sp,
+                        lineHeight = 22.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // === Карта OpenStreetMap ===
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 16.dp)
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    MapView(ctx).apply {
+                        setTileSource(TileSourceFactory.MAPNIK)
+                        setMultiTouchControls(true)
+                        controller.setZoom(10.0)
+                        controller.setCenter(GeoPoint(55.7558, 37.6173))
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                update = { mapView ->
+                    mapView.overlays.clear()
+
+                    listOf(
+                        Triple(55.7539, 37.6208, "Красная площадь"),
+                        Triple(55.8299, 37.6375, "ВДНХ"),
+                        Triple(55.7285, 37.6090, "Парк Горького")
+                    ).forEach { (lat, lon, title) ->
+                        mapView.overlays.add(Marker(mapView).apply {
+                            position = GeoPoint(lat, lon)
+                            this.title = title
+                        })
+                    }
+                    mapView.invalidate()
+                }
+            )
+        }
+
+        // Описание под картой
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Популярные места для чтения в Москве",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "На карте отмечены интересные локации.",
+                    color = Color.LightGray,
+                    fontSize = 14.sp
+                )
+            }
+        }
     }
 }
-
 @Composable
 fun MyBooksScreen(navController: NavHostController) {
     val context = LocalContext.current
@@ -655,3 +793,9 @@ private suspend fun copyAssetsPdfsToInternal(context: Context, pdfStorage: PdfSt
         e.printStackTrace()
     }
 }
+
+@Serializable
+data class CatFactResponse(
+    val fact: String,
+    val length: Int
+)

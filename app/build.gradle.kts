@@ -61,4 +61,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")               // часто нужно для collectAsState
     implementation("androidx.activity:activity-compose:1.9.2")  // или актуальную версию
     implementation("androidx.compose.material:material-icons-extended:1.7.0")  // для иконок
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
+
+    implementation("io.ktor:ktor-client-core:2.3.12")
+    implementation("io.ktor:ktor-client-cio:2.3.12")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
 }
